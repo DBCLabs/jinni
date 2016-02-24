@@ -1,23 +1,7 @@
 <?php
 require_once __DIR__ . '/vendor/autoload.php';
 
-require_once( '/vendor/facebook/FacebookSession.php' );
-require_once( '/vendor/facebook/FacebookRedirectLoginHelper.php' );
-require_once( '/vendor/facebook/FacebookRequest.php' );
-require_once( '/vendor/facebook/FacebookResponse.php' );
-require_once( '/vendor/facebook/FacebookSDKException.php' );
-require_once( '/vendor/facebook/FacebookRequestException.php' );
-require_once( '/vendor/facebook/FacebookAuthorizationException.php' );
-require_once( '/vendor/facebook/GraphObject.php' );
-
-use Facebook\FacebookSession;
-use Facebook\FacebookRedirectLoginHelper;
-use Facebook\FacebookRequest;
-use Facebook\FacebookResponse;
-use Facebook\FacebookSDKException;
-use Facebook\FacebookRequestException;
-use Facebook\FacebookAuthorizationException;
-use Facebook\GraphObject;
+date_default_timezone_set('America/New_York');
 
 define("PAGE_ID", 1567438433575561);
 
@@ -33,15 +17,27 @@ $response = $fb->post(PAGE_ID . '/feed', array ('message' => 'Hope this works'))
 $graphObject = $response->getGraphNode();
 */
 
-$request = new FacebookRequest(
+$request = new Facebook\FacebookRequest(
     $session,
     'GET',
     '/'.PAGE_ID.'/conversations'
 );
-/*
-$response = $request->execute();
-$graphObject = $response->getGraphObject();
-echo $graphObject;
-*/
+
+$response = $fb->get(PAGE_ID . '/conversations');
+
+$graphEdge = $response->getGraphEdge();
+
+foreach ($graphEdge as $graphNode) {
+    print_r($graphNode);
+}
+
+
+
+//$conversationsArray = $graphEdge => ['items'];
+
+//print_r($conversationsArray);
+
+//echo $graphObject;
+
 
 ?>

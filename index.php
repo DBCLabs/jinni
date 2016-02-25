@@ -15,5 +15,3 @@
 //$graphObject = $response->getGraphNode();
 
 echo "HI";
-
-?>

@@ -1,2 +1,4 @@
 <?php
-echo "You have a new message";
+require_once __DIR__ . '/vendor/autoload.php';
+
+echo $_GET['hub.challenge'];

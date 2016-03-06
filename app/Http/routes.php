@@ -1,6 +1,5 @@
 <?php
 
-use Log;
 use Illuminate\Http\Request;
 
 /*

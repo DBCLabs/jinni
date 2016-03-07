@@ -18,18 +18,20 @@ Route::get('/', function () {
 });
 
 Route::get('/fbNewMessage', function (Request $request) {
+    Log::info('GET - fbNewMessage');
     $verify = env('HUB_VERIFY_TOKEN');
     if ($request->query('hub_mode') == 'subscribe' && $request->query('hub_verify_token') == $verify) {
         echo $request->query('hub_challenge');
-        Log::info('Subscription verification request received');
+        Log::info('Valid subscription verification request received');
     }
 });
 
 Route::post('/fbNewMessage', function (Request $request) {
+    Log::info('POST - fbNewMessage');
     $verify = env('HUB_VERIFY_TOKEN');
     if ($request->query('hub_verify_token') == $verify) {
         $content = $request->getContent();
-        Log::info('New message update received, callback Content: ' . $content);
+        Log::info('Callback Content: ' . $content);
     }
 });
 

@@ -26,15 +26,7 @@ Route::get('/fbNewMessage', function (Request $request) {
     }
 });
 
-Route::post('/fbNewMessage', function (Request $request) {
-    Log::info('POST - fbNewMessage');
-    $content = $request->json();
-    Log::info('Callback Content: ' . print_r($content, true));
-    $verify = env('HUB_VERIFY_TOKEN');
-    if ($content->get('hub_verify_token') == $verify) {
-        Log::info('Valid update received');
-    }
-});
+Route::post('/fbNewMessage', 'FbNewMessageController@processMessage');
 
 /*
 |--------------------------------------------------------------------------

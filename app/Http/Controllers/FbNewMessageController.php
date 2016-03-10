@@ -30,6 +30,14 @@ class FbNewMessageController extends Controller
             ]);
             $fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
 
+            $db = mysqli_connect(env('DB_HOST'), env('DB_USERNAME'), env('DB_PASSWORD'), env('DB_DATABASE'), env('DB_PORT'));
+            if (mysqli_connect_errno()) {
+                Log::error('Error connecting to db' . mysqli_connect_errno());
+                abort(500);
+            }
+
+            $fbIds = mysqli_query($db, 'SELECT fbId FROM user');
+
             $entries = $content->get('entry');
             foreach ($entries as $entry) {
                 $changes = $entry['changes'];
@@ -44,7 +52,16 @@ class FbNewMessageController extends Controller
                             $sender = $singleMessage->getField('from');
                             $senderId = $sender->getField('id');
                             Log::info($senderId);
-                            $senderName = $sender->getField('name');
+
+                            if (!in_array($senderId, $fbIds)) {
+                                $senderName = $sender->getField('name');
+                                $fbIds = mysqli_query($db,
+                                    "INSERT INTO user (fbId,fbName,matchedUser) VALUES ($senderId,$senderName,NULL)");
+                                Log::info("Saved $senderId to db");
+                            }
+                            else {
+                                Log::info("$senderId already exists in db");
+                            }
                         }
                     }
                 }

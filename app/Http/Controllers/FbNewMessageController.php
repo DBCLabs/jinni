@@ -23,6 +23,7 @@ class FbNewMessageController extends Controller
         if ($valid) {
             Log::debug('Valid update received');
 
+            Log::info(env('APP_ID'));
             $fb = new Facebook([
                 'app_id' => env('APP_ID'),
                 'app_secret' => env('APP_SECRET'),
@@ -30,13 +31,22 @@ class FbNewMessageController extends Controller
             ]);
             $fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
 
-            $db = mysqli_connect(env('DB_HOST'), env('DB_USERNAME'), env('DB_PASSWORD'), env('DB_DATABASE'), env('DB_PORT'));
+            $dbConn = mysqli_connect(env('DB_HOST'), env('DB_USERNAME'), env('DB_PASSWORD'), env('DB_DATABASE'), env('DB_PORT'));
             if (mysqli_connect_errno()) {
                 Log::error('Error connecting to db' . mysqli_connect_errno());
                 abort(500);
             }
 
-            $fbIds = mysqli_query($db, 'SELECT fbId FROM user');
+            $fbIds = array();
+            $userRows = mysqli_query($dbConn, 'SELECT fbId FROM user');
+            if (!$userRows) {
+                Log::error("Error: " . mysqli_error($dbConn));
+                exit();
+            }
+            while($row = mysqli_fetch_array($userRows))
+            {
+                $fbIds[] = $row['fbId'];
+            }
 
             $entries = $content->get('entry');
             foreach ($entries as $entry) {
@@ -55,8 +65,14 @@ class FbNewMessageController extends Controller
 
                             if (!in_array($senderId, $fbIds)) {
                                 $senderName = $sender->getField('name');
-                                $fbIds = mysqli_query($db,
-                                    "INSERT INTO user (fbId,fbName,matchedUser) VALUES ($senderId,$senderName,NULL)");
+                                Log::info($senderName);
+                                //TODO switch to prepared statements
+                                $success = mysqli_query($dbConn,
+                                    "INSERT INTO user (fbId,fbName) VALUES ('$senderId','$senderName')");
+                                if (!$success) {
+                                    Log::error("Error: " . mysqli_error($dbConn));
+                                    exit();
+                                }
                                 Log::info("Saved $senderId to db");
                             }
                             else {

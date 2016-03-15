@@ -23,12 +23,30 @@ class FbNewMessageController extends Controller
         if ($valid) {
             Log::debug('Valid update received');
 
+            Log::info(env('APP_ID'));
             $fb = new Facebook([
                 'app_id' => env('APP_ID'),
                 'app_secret' => env('APP_SECRET'),
                 'default_graph_version' => 'v2.5',
             ]);
             $fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
+
+            $dbConn = mysqli_connect(env('DB_HOST'), env('DB_USERNAME'), env('DB_PASSWORD'), env('DB_DATABASE'), env('DB_PORT'));
+            if (mysqli_connect_errno()) {
+                Log::error('Error connecting to db' . mysqli_connect_errno());
+                abort(500);
+            }
+
+            $fbIds = array();
+            $userRows = mysqli_query($dbConn, 'SELECT fbId FROM user');
+            if (!$userRows) {
+                Log::error("Error: " . mysqli_error($dbConn));
+                exit();
+            }
+            while($row = mysqli_fetch_array($userRows))
+            {
+                $fbIds[] = $row['fbId'];
+            }
 
             $entries = $content->get('entry');
             foreach ($entries as $entry) {
@@ -44,7 +62,22 @@ class FbNewMessageController extends Controller
                             $sender = $singleMessage->getField('from');
                             $senderId = $sender->getField('id');
                             Log::info($senderId);
-                            $senderName = $sender->getField('name');
+
+                            if (!in_array($senderId, $fbIds)) {
+                                $senderName = $sender->getField('name');
+                                Log::info($senderName);
+                                //TODO switch to prepared statements
+                                $success = mysqli_query($dbConn,
+                                    "INSERT INTO user (fbId,fbName) VALUES ('$senderId','$senderName')");
+                                if (!$success) {
+                                    Log::error("Error: " . mysqli_error($dbConn));
+                                    exit();
+                                }
+                                Log::info("Saved $senderId to db");
+                            }
+                            else {
+                                Log::info("$senderId already exists in db");
+                            }
                         }
                     }
                 }

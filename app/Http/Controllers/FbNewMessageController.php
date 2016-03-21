@@ -35,7 +35,7 @@ class FbNewMessageController extends Controller
             $fbIdsToUsers = array();
             $idsToUsers = array();
             $userRows = DB::select('SELECT fbId FROM user');
-            if ($userRows === NULL) {
+            if ($userRows === null) {
                 Log::error('Error retrieving users');
                 exit();
             }
@@ -50,7 +50,7 @@ class FbNewMessageController extends Controller
                 $changes = $entry['changes'];
 
                 foreach ($changes as $change) {
-                    if ($change['value'] !== NULL && $change['value']['thread_id'] !== NULL) {
+                    if ($change['value'] !== null && $change['value']['thread_id'] !== null) {
                         $conversationID = $change['value']['thread_id'];
                         $conversationResponse = $fb->get($conversationID . '/messages?limit=1&fields=message,created_time,from,to');
                         $conversationEdge = $conversationResponse->getGraphEdge();
@@ -61,9 +61,9 @@ class FbNewMessageController extends Controller
                             $senderFbName = $sender->getField('name');
                             $messageText = $singleMessage->getField('message');
 
-                            $senderFromDb = $fbIdsToUsers[$senderFbId];
+                            $senderFromDb = isset($fbIdsToUsers[$senderFbId]) ? $fbIdsToUsers[$senderFbId] : null;
 
-                            if ($senderFromDb !== NULL) {
+                            if ($senderFromDb === null) {
                                 //TODO switch to prepared statements
                                 DB::insert("INSERT INTO user (fbId,fbName,fbConversationId) VALUES ('$senderFbId','$senderFbName', '$conversationID')");
                                 Log::info("Saved $senderFbId to db");
@@ -71,9 +71,8 @@ class FbNewMessageController extends Controller
                             else {
                                 Log::info("$senderFbId already exists in db, routing message");
                                 Log::info($messageText);
-                                $matchedUser = $idsToUsers[$senderFromDb->matchedUser];
-                                if ($matchedUser !== NULL) {
-                                    $matchedUserConversation = $matchedUser->conversationID;
+                                if (isset($idsToUsers[$senderFromDb->matchedUser])) {
+                                    $matchedUserConversation = $idsToUsers[$senderFromDb->matchedUser]->conversationID;
                                     $fb->post($matchedUserConversation . '/messages', array('message' => $messageText));
                                     Log::debug("Successfully routed message to $matchedUserConversation");
                                 }

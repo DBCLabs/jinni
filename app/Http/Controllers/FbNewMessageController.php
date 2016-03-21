@@ -35,7 +35,7 @@ class FbNewMessageController extends Controller
             $fbIdsToUsers = array();
             $idsToUsers = array();
             $userRows = DB::select('SELECT fbId FROM user');
-            if (!$userRows) {
+            if ($userRows === NULL) {
                 Log::error('Error retrieving users');
                 exit();
             }

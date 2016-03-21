@@ -32,16 +32,16 @@ class FbNewMessageController extends Controller
             ]);
             $fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
 
-            $fbIdsToUsers = array();
+            $fbIdsToUserIds = array();
             $idsToUsers = array();
-            $userRows = DB::select('SELECT fbId FROM user');
+            $userRows = DB::select('SELECT * FROM user');
             if ($userRows === null) {
                 Log::error('Error retrieving users');
                 exit();
             }
             foreach($userRows as $user)
             {
-                $fbIdsToUsers[$user->fbId] = $user;
+                $fbIdsToUserIds[$user->fbId] = $user->id;
                 $idsToUsers[$user->id] = $user;
             }
 
@@ -61,18 +61,18 @@ class FbNewMessageController extends Controller
                             $senderFbName = $sender->getField('name');
                             $messageText = $singleMessage->getField('message');
 
-                            $senderFromDb = isset($fbIdsToUsers[$senderFbId]) ? $fbIdsToUsers[$senderFbId] : null;
+                            $senderIdFromDb = isset($fbIdsToUserIds[$senderFbId]) ? $fbIdsToUserIds[$senderFbId] : null;
 
-                            if ($senderFromDb === null) {
+                            if ($senderIdFromDb === null) {
                                 //TODO switch to prepared statements
                                 DB::insert("INSERT INTO user (fbId,fbName,fbConversationId) VALUES ('$senderFbId','$senderFbName', '$conversationID')");
+                                $fbIdsToUserIds[$senderFbId] = DB::connection()->getPdo()->lastInsertId();
                                 Log::info("Saved $senderFbId to db");
                             }
                             else {
                                 Log::info("$senderFbId already exists in db, routing message");
-                                Log::info($messageText);
-                                if (isset($idsToUsers[$senderFromDb->matchedUser])) {
-                                    $matchedUserConversation = $idsToUsers[$senderFromDb->matchedUser]->conversationID;
+                                if (isset($idsToUsers[$senderIdFromDb]) && isset($idsToUsers[$idsToUsers[$senderIdFromDb]->matchedUser])) {
+                                    $matchedUserConversation = $idsToUsers[$idsToUsers[$senderIdFromDb]->matchedUser]->fbConversationId;
                                     $fb->post($matchedUserConversation . '/messages', array('message' => $messageText));
                                     Log::debug("Successfully routed message to $matchedUserConversation");
                                 }

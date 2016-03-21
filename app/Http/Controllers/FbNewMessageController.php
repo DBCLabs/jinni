@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Facebook\Facebook;
+use DB;
+use Event;
 use Log;
 
 class FbNewMessageController extends Controller
@@ -23,7 +25,6 @@ class FbNewMessageController extends Controller
         if ($valid) {
             Log::debug('Valid update received');
 
-            Log::info(env('APP_ID'));
             $fb = new Facebook([
                 'app_id' => env('APP_ID'),
                 'app_secret' => env('APP_SECRET'),
@@ -31,21 +32,17 @@ class FbNewMessageController extends Controller
             ]);
             $fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
 
-            $dbConn = mysqli_connect(env('DB_HOST'), env('DB_USERNAME'), env('DB_PASSWORD'), env('DB_DATABASE'), env('DB_PORT'));
-            if (mysqli_connect_errno()) {
-                Log::error('Error connecting to db' . mysqli_connect_errno());
-                abort(500);
-            }
-
-            $fbIds = array();
-            $userRows = mysqli_query($dbConn, 'SELECT fbId FROM user');
+            $fbIdsToUsers = array();
+            $idsToUsers = array();
+            $userRows = DB::select('SELECT fbId FROM user');
             if (!$userRows) {
-                Log::error("Error: " . mysqli_error($dbConn));
+                Log::error('Error retrieving users');
                 exit();
             }
-            while($row = mysqli_fetch_array($userRows))
+            foreach($userRows as $user)
             {
-                $fbIds[] = $row['fbId'];
+                $fbIdsToUsers[$user->fbId] = $user;
+                $idsToUsers[$user->id] = $user;
             }
 
             $entries = $content->get('entry');
@@ -60,23 +57,27 @@ class FbNewMessageController extends Controller
 
                         foreach($conversationEdge as $singleMessage) {
                             $sender = $singleMessage->getField('from');
-                            $senderId = $sender->getField('id');
-                            Log::info($senderId);
+                            $senderFbId = $sender->getField('id');
+                            $senderFbName = $sender->getField('name');
+                            $messageText = $singleMessage->getField('message');
 
-                            if (!in_array($senderId, $fbIds)) {
-                                $senderName = $sender->getField('name');
-                                Log::info($senderName);
+                            $senderFromDb = $fbIdsToUsers[$senderFbId];
+
+                            if ($senderFromDb !== NULL) {
                                 //TODO switch to prepared statements
-                                $success = mysqli_query($dbConn,
-                                    "INSERT INTO user (fbId,fbName) VALUES ('$senderId','$senderName')");
-                                if (!$success) {
-                                    Log::error("Error: " . mysqli_error($dbConn));
-                                    exit();
-                                }
-                                Log::info("Saved $senderId to db");
+                                DB::insert("INSERT INTO user (fbId,fbName,fbConversationId) VALUES ('$senderFbId','$senderFbName', '$conversationID')");
+                                Log::info("Saved $senderFbId to db");
                             }
                             else {
-                                Log::info("$senderId already exists in db");
+                                Log::info("$senderFbId already exists in db, routing message");
+                                Log::info($messageText);
+                                $matchedUser = $idsToUsers[$senderFromDb->matchedUser];
+                                if ($matchedUser !== NULL) {
+                                    $matchedUserConversation = $matchedUser->conversationID;
+                                    $fb->post($matchedUserConversation . '/messages', array('message' => $messageText));
+                                    Log::debug("Successfully routed message to $matchedUserConversation");
+                                }
+
                             }
                         }
                     }

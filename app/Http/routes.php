@@ -26,7 +26,7 @@ Route::get('/fbNewMessage', function (Request $request) {
     }
 });
 
-Route::post('/fbNewMessage', 'FbNewMessageController@processMessage');
+Route::post('/fbNewMessage', 'FbConversationCallbackController@processConversationCallbackRequest');
 
 /*
 |--------------------------------------------------------------------------

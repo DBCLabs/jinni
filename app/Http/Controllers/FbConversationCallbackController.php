@@ -15,6 +15,7 @@ class FbConversationCallbackController extends Controller
     private $fbIdsToUserIds = array();
     private $idsToUsers = array();
     private $availableUsers = array();
+    private $matchedUsers = array();
 
     /**
      * Process facebook message callback.
@@ -38,7 +39,8 @@ class FbConversationCallbackController extends Controller
             ]);
             $this->fb->setDefaultAccessToken(env('PAGE_ACCESS_TOKEN'));
 
-            $userRows = DB::select('SELECT * FROM user');
+            $this->matchedUsers = DB::table('userMatch')->pluck('matchId');
+            $userRows = DB::table('user')->get();
             if ($userRows === null) {
                 Log::error('Error retrieving users');
                 exit();
@@ -47,7 +49,7 @@ class FbConversationCallbackController extends Controller
             {
                 $this->fbIdsToUserIds[$user->fbId] = $user->id;
                 $this->idsToUsers[$user->id] = $user;
-                if ($user->matchedUser === null) {
+                if (!in_array($user->id, $this->matchedUsers)) {
                     $this->availableUsers[] = $user;
                 }
             }
@@ -76,7 +78,7 @@ class FbConversationCallbackController extends Controller
         }
     }
 
-    private function processMessage($singleMessage, $conversationID)
+    private function processMessage($singleMessage, $conversationId)
     {
         $sender = $singleMessage->getField('from');
         $senderFbId = $sender->getField('id');
@@ -87,32 +89,38 @@ class FbConversationCallbackController extends Controller
             $this->fbIdsToUserIds[$senderFbId] : null;
 
         if ($senderIdFromDb === null) {
-            //TODO switch to prepared statements
-            DB::insert("INSERT INTO user (fbId,fbName,fbConversationId) VALUES ('$senderFbId','$senderFbName', '$conversationID')");
-            $this->fbIdsToUserIds[$senderFbId] = DB::connection()->getPdo()->lastInsertId();
+            //TODO make this a transaction
+            $id = DB::table('user')->insertGetId(['fbId' => $senderFbId,'fbName' => $senderFbName,'fbConversationId' => $conversationId]);
+            $this->fbIdsToUserIds[$senderFbId] = $id;
+            DB::table('userMatch')->insert(['userId' => $id]);
             Log::info("Saved $senderFbId to db");
         } else {
+
             //TODO logic for processing special commands should go here
             if ($messageText === '/n') {
                 $this->findAndSetMatchedUser($senderIdFromDb);
+
+                return;
             }
 
-
-            if (isset($this->idsToUsers[$senderIdFromDb]) && isset($this->idsToUsers[$this->idsToUsers[$senderIdFromDb]->matchedUser])) {
+            $matchId = DB::table('userMatch')->where('userId', $senderIdFromDb)->value('matchId');
+            if ($matchId !== null && isset($this->idsToUsers[$matchId])) {
                 Log::info("$senderFbId already exists in db and is already matched, routing message");
-                $this->routeMessageToMatchedUser($senderIdFromDb, $messageText);
-            } else if (isset($this->idsToUsers[$senderIdFromDb])) {
+                $this->routeMessageToMatchedUser($matchId, $messageText);
+            } else {
                 Log::info("$senderFbId already exists in db and is not matched, finding a match and then routing message");
-                $this->findAndSetMatchedUser($senderIdFromDb);
-                $this->routeMessageToMatchedUser($senderIdFromDb, $messageText);
+                $matchId = $this->findAndSetMatchedUser($senderIdFromDb);
+                if ($matchId !== null && isset($this->idsToUsers[$matchId])) {
+                    $this->routeMessageToMatchedUser($matchId, $messageText);
+                }
             }
 
         }
     }
 
-    private function routeMessageToMatchedUser($senderIdFromDb, $messageText)
+    private function routeMessageToMatchedUser($matchId, $messageText)
     {
-        $matchedUserConversation = $this->idsToUsers[$this->idsToUsers[$senderIdFromDb]->matchedUser]->fbConversationId;
+        $matchedUserConversation = $this->idsToUsers[$matchId]->fbConversationId;
         $this->fb->post($matchedUserConversation . '/messages', array('message' => $messageText));
         Log::debug("Successfully routed message to $matchedUserConversation");
     }
@@ -130,7 +138,10 @@ class FbConversationCallbackController extends Controller
         if ($numMatches > 0) {
             $matchId = $eligibleMatches[mt_rand(0, $numMatches - 1)];
 
-            DB::update("UPDATE user SET matchedUser=$matchId WHERE id=$senderIdFromDb");
+            DB::table('userMatch')->where('userId', $senderIdFromDb)->update(['matchId' => $matchId]);
+            DB::table('userMatch')->where('userId', $matchId)->update(['matchId' => $senderIdFromDb]);
+
+            return $matchId;
         }
     }
 }

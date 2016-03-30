@@ -109,14 +109,108 @@ class FbConversationCallbackController extends Controller
             $this->fbIdsToUserIds[$senderFbId] = $id;
             DB::table('userMatch')->insert(['userId' => $id]);
             Log::info("Saved $senderFbId to db");
+
+            $this->fb->post($conversationId. '/messages', array('message' =>
+                'Hi bebe, I\'m Jinni. I match my friends with other friends all around the world anonymously for fun and spontaneous conversation. Let serendipity reign!
+                You can message me at any time and I\'ll find you a buddy, friend, lover, pet, sweetheart, or whatever floats your boat to chat with. To get started
+                what\'s your age?'));
+
         } else {
 
             //TODO logic for processing special commands should go here
-            if ($messageText === '/n') {
+
+            if ($this->idsToUsers[$senderIdFromDb]->age === null ) {
+                if (ctype_digit($messageText)) {
+                    DB::table('user')->where('userId', $senderIdFromDb)->update(['age' => $messageText]);
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'Cool! Next question - what gender are you? You can just say M or F.'));
+                }
+                else {
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'Hey there, didn\'t get that. Try one more time and make sure to enter your age as a number!'));
+                }
+
+                return;
+
+            }
+
+            if ($this->idsToUsers[$senderIdFromDb]->gender === null ) {
+                if ($messageText === 'M' || $messageText === 'F') {
+                    DB::table('user')->where('userId', $senderIdFromDb)->update(['gender' => $messageText]);
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'Awesome! Final question - what city are you located in?'));
+                }
+                else {
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'Ugh, didn\'t get that. Try one more time and make sure to enter your gender as M or F!'));
+                }
+
+                return;
+
+            }
+
+            if ($this->idsToUsers[$senderIdFromDb]->city === null ) {
+
+                DB::table('user')->where('userId', $senderIdFromDb)->update(['city' => $messageText]);
+                $this->fb->post($conversationId. '/messages', array('message' =>
+                    'Perfection! A couple rules of the road. You can choose what type of conversation you want at any time by messaging me your taste of the moment.
+                Send me /chat to get matched with a stranger for general chitchat, /romance to get matched for
+                some more salacious conversation ;-) (ages 18+ only), and /explore to get matched with a new friend from another city. At any time
+                you can switch to a new conversation by sending one of the above commands. Give it a try to get started - who can I set you up with?!
+                '));
+                return;
+            }
+
+            if ($messageText === '/chat') {
+                $this->fb->post($conversationId. '/messages', array('message' => "I'm looking for a new match. Sit tight bebe :*."));
+                DB::table('user')->where('userId', $senderIdFromDb)->update(['genre' => 0]);
+
                 $this->findAndSetMatchedUser($senderIdFromDb);
+                // Responding to commands if current user
 
                 return;
             }
+
+            if ($messageText === '/explore') {
+                $this->fb->post($conversationId. '/messages', array('message' => "I'm looking for a new match. Sit tight bebe :*."));
+                DB::table('user')->where('userId', $senderIdFromDb)->update(['genre' => 1]);
+
+                $this->findAndSetMatchedUser($senderIdFromDb);
+                // Responding to commands if current user
+
+                return;
+            }
+
+            if ($messageText === '/romance') {
+                $this->fb->post($conversationId. '/messages', array('message' => "I'm looking for a new match. Sit tight bebe :*."));
+                DB::table('user')->where('userId', $senderIdFromDb)->update(['genre' => 2]);
+
+                if ($this->idsToUsers[$senderIdFromDb]->romancePref === null) {
+                    $this->fb->post($conversationId . '/messages', array('message' => 'Naughty! What gender are you looking to chat with? Just say M or F.'));
+                }
+
+                $this->findAndSetMatchedUser($senderIdFromDb);
+                // Responding to commands if current user
+
+                return;
+            }
+
+            if ($this->idsToUsers[$senderIdFromDb]->romancePref === null && $this->idsToUsers[$senderIdFromDb]->genre === 2) {
+                if ($messageText === 'M' || $messageText === 'F') {
+                    DB::table('user')->where('userId', $senderIdFromDb)->update(['romancePref' => $messageText]);
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'I\'m looking for a new match. Sit tight bebe :*.'));
+                    $this->findAndSetMatchedUser($senderIdFromDb);
+
+                }
+                else {
+                    $this->fb->post($conversationId. '/messages', array('message' =>
+                        'Ugh, didn\'t get that. Try one more time and make sure to enter gender as M or F!'));
+                }
+            }
+
+
+
 
             $matchId = DB::table('userMatch')->where('userId', $senderIdFromDb)->value('matchId');
             if ($matchId !== null && isset($this->idsToUsers[$matchId])) {

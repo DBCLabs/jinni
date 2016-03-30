@@ -28,6 +28,8 @@ class FbConversationCallbackController extends Controller
         Log::info('POST - fbNewMessage');
         $content = $request->json();
         Log::debug('Callback Content: ' . print_r($content, true));
+
+        //TODO check validity
         $valid = true;
         if ($valid) {
             Log::debug('Valid update received');
@@ -55,27 +57,40 @@ class FbConversationCallbackController extends Controller
             }
 
             $entries = $content->get('entry');
+
+
+            //first count how many messages were sent
+            $newMessageCountByConversationId = array();
             foreach ($entries as $entry) {
                 $changes = $entry['changes'];
 
                 foreach ($changes as $change) {
-                    $this->processChange($change);
+                    if ($change['value'] !== null && $change['value']['thread_id'] !== null) {
+                        $conversationId = $change['value']['thread_id'];
+                        if (array_key_exists($conversationId, $newMessageCountByConversationId)) {
+                            $newMessageCountByConversationId[$conversationId] += 1;
+                        } else {
+                            $newMessageCountByConversationId[$conversationId] = 1;
+                        }
+                    }
                 }
+            }
+
+            foreach ($newMessageCountByConversationId as $conversationId => $count) {
+                $this->processNewMessages($conversationId, $count);
             }
         }
     }
 
-    private function processChange($change)
+    private function processNewMessages($conversationId, $count)
     {
-        if ($change['value'] !== null && $change['value']['thread_id'] !== null) {
-            $conversationID = $change['value']['thread_id'];
-            $conversationResponse = $this->fb->get($conversationID . '/messages?limit=1&fields=message,created_time,from,to');
-            $conversationEdge = $conversationResponse->getGraphEdge();
+        $conversationResponse = $this->fb->get($conversationId . "/messages?limit=$count&fields=message,created_time,from,to");
+        $conversationEdge = $conversationResponse->getGraphEdge();
 
-            foreach ($conversationEdge as $singleMessage) {
-                $this->processMessage($singleMessage, $conversationID);
-            }
+        foreach ($conversationEdge as $singleMessage) {
+            $this->processMessage($singleMessage, $conversationId);
         }
+
     }
 
     private function processMessage($singleMessage, $conversationId)

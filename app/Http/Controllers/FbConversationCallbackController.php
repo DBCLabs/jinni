@@ -59,14 +59,24 @@ class FbConversationCallbackController extends Controller
             $entries = $content->get('entry');
 
 
-            //first count how many messages were sent
+            //first count how many messages were sent and find initial time sent
             $newMessageCountByConversationId = array();
+            $timestampByConversationId = array();
             foreach ($entries as $entry) {
                 $changes = $entry['changes'];
+                $timestamp = (int) $entry['time'];
 
                 foreach ($changes as $change) {
                     if ($change['value'] !== null && $change['value']['thread_id'] !== null) {
                         $conversationId = $change['value']['thread_id'];
+
+                        if (!array_key_exists($conversationId, $timestampByConversationId)) {
+                            $timestampByConversationId[$conversationId] = $timestamp;
+                        } else if (array_key_exists($conversationId, $timestampByConversationId) &&
+                            $timestampByConversationId[$conversationId] > $timestamp) {
+                            $timestampByConversationId[$conversationId] = $timestamp;
+                        }
+
                         if (array_key_exists($conversationId, $newMessageCountByConversationId)) {
                             $newMessageCountByConversationId[$conversationId] += 1;
                         } else {
@@ -77,18 +87,24 @@ class FbConversationCallbackController extends Controller
             }
 
             foreach ($newMessageCountByConversationId as $conversationId => $count) {
-                $this->processNewMessages($conversationId, $count);
+                //subtract 1 from timestamp because facebook seems to not use it inclusively
+                $this->processNewMessages($conversationId, $count, $timestampByConversationId[$conversationId]);
             }
         }
     }
 
-    private function processNewMessages($conversationId, $count)
+    private function processNewMessages($conversationId, $count, $timestamp)
     {
-        $conversationResponse = $this->fb->get($conversationId . "/messages?limit=$count&fields=message,created_time,from,to");
+        Log::debug("Count:  $count, timestamp: $timestamp" );
+        $conversationResponse = $this->fb->get($conversationId . "/messages?&limit=3&fields=message,created_time,from,to");
         $conversationEdge = $conversationResponse->getGraphEdge();
-
-        foreach ($conversationEdge as $singleMessage) {
-            $this->processMessage($singleMessage, $conversationId);
+        $conversationNodesChronological = array();
+        Log::debug('Edge:  ' . print_r($conversationEdge, true));
+        foreach ($conversationEdge as $conversationNode) {
+            array_unshift($conversationNodesChronological, $conversationNode);
+        }
+        foreach ($conversationNodesChronological as $conversationNode) {
+            $this->processMessage($conversationNode, $conversationId);
         }
 
     }
